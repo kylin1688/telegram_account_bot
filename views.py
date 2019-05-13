@@ -9,11 +9,11 @@ import json
 from flask import current_app
 from sqlalchemy import extract
 import datetime
-from config import BOT_TOKEN
+from config import BOT_TOKEN, KEYBOARD, IN_KEYWORD
 
 bot = telegram.Bot(token=BOT_TOKEN)
 dispatcher = Dispatcher(bot, None)
-keyboard = ReplyKeyboardMarkup([['出行', '饮食', '娱乐'], ['收入']])
+keyboard = ReplyKeyboardMarkup(KEYBOARD)
 
 Redis = redis.StrictRedis(decode_responses=True)
 
@@ -24,7 +24,7 @@ def reply_handler(bot, update):
     raw = Redis.get(tg_user.username)
 
     if raw is None:
-        Redis.set(tg_user.username, json.dumps({'category': text, 'type': 'out' if text != '收入' else 'in'}))
+        Redis.set(tg_user.username, json.dumps({'category': text, 'type': 'out' if text != IN_KEYWORD else 'in'}))
         update.message.reply_text('请输入金额')
 
     else:
