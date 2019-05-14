@@ -1,21 +1,28 @@
-import telegram
-from collections import defaultdict
-from telegram import ReplyKeyboardMarkup
-from telegram.ext import Dispatcher, Filters, CommandHandler, MessageHandler
-from models import db, User, Bill
-from decimal import Decimal
-import redis
+import datetime
 import json
+from collections import defaultdict
+from decimal import Decimal
+
+import redis
+import telegram
+from dateutil.relativedelta import relativedelta
 from flask import current_app
 from sqlalchemy import extract
-import datetime
-from config import BOT_TOKEN, KEYBOARD, IN_KEYWORD
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup)
+from telegram.ext import (CallbackQueryHandler, CommandHandler, Dispatcher,
+                          Filters, MessageHandler)
+
+from config import BOT_TOKEN, IN_KEYWORD, KEYBOARD
+from models import Bill, User, db
 
 bot = telegram.Bot(token=BOT_TOKEN)
 dispatcher = Dispatcher(bot, None)
 keyboard = ReplyKeyboardMarkup(KEYBOARD)
 
 Redis = redis.StrictRedis(decode_responses=True)
+
+# TODO /year 每月消费对比
 
 def reply_handler(bot, update):
 
@@ -41,7 +48,7 @@ def reply_handler(bot, update):
             bill.update({'amount': Decimal(amount), 'user_id': user.id})
         
         if bill['type'] == 'out':
-            reply = f'支出：{amount}元，类目：{bill["type"]}'
+            reply = f'支出：{amount}元，类目：{bill["category"]}'
             user.balance -= Decimal(amount)
         elif bill['type'] == 'in':
             reply = f'收入：{amount}元' + f'{bill["name"]}' if bill.get('name') else ''
@@ -59,8 +66,7 @@ def start_handler(bot, update):
     if user is None:
         db.session.add(User(username=tg_user.username, first_name=tg_user.first_name))
         db.session.commit()
-        update.message.reply_text('welcome message', 
-            reply_markup=keyboard)
+        update.message.reply_text('welcome message', reply_markup=keyboard)
     else:
         update.message.reply_text('welcome back', reply_markup=keyboard)
 
@@ -85,15 +91,58 @@ def set_balance_handler(bot, update):
         db.session.commit()
     update.message.reply_text(f'余额设置成功，当前余额：{balance}元')
 
-def month_statistic(bot, update):
+def month_command_handler(bot, update):
 
+    # TODO 指定月份查询
+    # TODO 查看账单详情
     tg_user = update.message.from_user
     user = User.query.filter_by(username=tg_user.username).first()
     dt_now = datetime.datetime.utcnow()
+    callback_data = {
+        'msg_type': 'month',
+        'month': dt_now.strftime('%Y-%m'),
+        'button': 'previous'
+    }
+    inline_keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton('<', callback_data=json.dumps(callback_data))
+    ]])
+    update.message.reply_text(get_month_statistic(user, dt_now.year, dt_now.month), reply_markup=inline_keyboard)
+
+def callback_query_handler(bot, update):
+
+    data = json.loads(update.callback_query.data)
+    user = User.query.filter_by(username=update.callback_query.from_user.username).first()
+    dt_now = datetime.datetime.utcnow()
+
+    if data['msg_type'] == 'month':
+
+        dt = datetime.datetime.strptime(data['month'], '%Y-%m')
+        dt += relativedelta(months= 1 if data['button'] == 'next' else -1)
+
+        statistic = get_month_statistic(user, dt.year, dt.month)
+        callback_data = {
+            'msg_type': 'month',
+            'month': dt.strftime('%Y-%m')
+        }
+        if dt.year == dt_now.year and dt.month == dt_now.month:
+            inline_keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'}))
+            ]])
+        else:
+            inline_keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'})),
+                InlineKeyboardButton('>', callback_data=json.dumps({**callback_data, 'button': 'next'}))
+            ]])
+
+        update.callback_query.edit_message_text(statistic, reply_markup=inline_keyboard)
+
+    update.callback_query.answer()
+
+def get_month_statistic(user:User, year:int, month:int)->str:
 
     bills = user.bills.filter(db.and_(
-        extract('year', Bill.create_time) == dt_now.year,
-        extract('month', Bill.create_time) == dt_now.month
+        extract('year', Bill.create_time) == year,
+        extract('month', Bill.create_time) == month
     )).all()
 
     bills_in = defaultdict(lambda :Decimal('0'))
@@ -106,30 +155,30 @@ def month_statistic(bot, update):
         elif bill.type == 'out':
             sum_out += bill.amount
             bills_out[bill.category] += bill.amount
+    bills_out = sorted(bills_out.items(), key=lambda item:item[1], reverse=True)
 
-    begin_part = f'{dt_now.year}年{dt_now.month}月收支统计\n\n'
-    def template(title, bills, tabs='\t\t\t\t\t\t\t'):
-        content = f'{title}\n\n'
-        if not bills:
-            content += f'{tabs}-  无\n'
-        else:
-            for k, v in bills.items():
-                content += f'{tabs}-  {k}: {str(v)}元\n'
-        content += '\n'
-        return content
-    out_part = template(f'支出：{str(sum_out)}元', bills_out)
+    begin_part = f'{year}年{month}月收支统计\n\n'
+    tabs = '\t\t\t\t\t\t\t'
     in_part = f'收入：{str(sum_in)}元\n'
-
-    update.message.reply_text((begin_part + out_part + in_part).rstrip())
+    out_part = f'支出：{str(sum_out)}元\n\n'
+    if not bills_out:
+        out_part += f'{tabs}-  无\n\n'
+    else:
+        for category, amount in bills_out:
+            out_part += f'{tabs}-  {category}: {str(amount)}元\n'
+        out_part += '\n'
+    return (begin_part + out_part + in_part).rstrip()
 
 def error_handler(bot, update, error):
     current_app.logger.error(error)
     update.message.reply_text('Something wrong')
 
+
+dispatcher.add_handler(CallbackQueryHandler(callback_query_handler))
 dispatcher.add_handler(MessageHandler(Filters.text, reply_handler))
 dispatcher.add_handler(CommandHandler('start', start_handler))
 dispatcher.add_handler(CommandHandler('set_balance', set_balance_handler))
 dispatcher.add_handler(CommandHandler('balance', get_balance))
-dispatcher.add_handler(CommandHandler('month', month_statistic))
+dispatcher.add_handler(CommandHandler('month', month_command_handler))
 dispatcher.add_handler(CommandHandler('cancel', cancel_handler))
 dispatcher.add_error_handler(error_handler)
