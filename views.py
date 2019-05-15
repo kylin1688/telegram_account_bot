@@ -7,14 +7,14 @@ import redis
 import telegram
 from dateutil.relativedelta import relativedelta
 from flask import current_app
-from sqlalchemy import extract
+from sqlalchemy import extract, text
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardMarkup)
 from telegram.ext import (CallbackQueryHandler, CommandHandler, Dispatcher,
                           Filters, MessageHandler)
 
 from config import BOT_TOKEN, IN_KEYWORD, KEYBOARD
-from models import Bill, User, db
+from models import Bill, User, db, get_datetime
 
 bot = telegram.Bot(token=BOT_TOKEN)
 dispatcher = Dispatcher(bot, None)
@@ -23,6 +23,7 @@ keyboard = ReplyKeyboardMarkup(KEYBOARD)
 Redis = redis.StrictRedis(decode_responses=True)
 
 # TODO /year 每月消费对比
+# TODO /day  日消费查询
 
 def reply_handler(bot, update):
 
@@ -32,7 +33,7 @@ def reply_handler(bot, update):
 
     if raw is None:
         Redis.set(tg_user.username, json.dumps({'category': text, 'type': 'out' if text != IN_KEYWORD else 'in'}))
-        update.message.reply_text('请输入金额')
+        update.message.reply_text(f'账单类别：{text}，请输入账单金额\n若想取消本次操作，请输入 /cancel')
 
     else:
 
@@ -48,7 +49,7 @@ def reply_handler(bot, update):
             bill.update({'amount': Decimal(amount), 'user_id': user.id})
         
         if bill['type'] == 'out':
-            reply = f'支出：{amount}元，类目：{bill["category"]}'
+            reply = f'支出：{amount}元，类别：{bill["category"]}'
             user.balance -= Decimal(amount)
         elif bill['type'] == 'in':
             reply = f'收入：{amount}元' + f'{bill["name"]}' if bill.get('name') else ''
@@ -94,49 +95,86 @@ def set_balance_handler(bot, update):
 def month_command_handler(bot, update):
 
     # TODO 指定月份查询
-    # TODO 查看账单详情
+
     tg_user = update.message.from_user
     user = User.query.filter_by(username=tg_user.username).first()
-    dt_now = datetime.datetime.utcnow()
+    dt_now = get_datetime()
     callback_data = {
         'msg_type': 'month',
-        'month': dt_now.strftime('%Y-%m'),
-        'button': 'previous'
+        'month': dt_now.strftime('%Y-%m')
     }
-    inline_keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton('<', callback_data=json.dumps(callback_data))
-    ]])
-    update.message.reply_text(get_month_statistic(user, dt_now.year, dt_now.month), reply_markup=inline_keyboard)
+
+    inline_keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'}))],
+        [InlineKeyboardButton('详情', callback_data=json.dumps({**callback_data, 'button': 'details'}))]
+    ])
+    statistic = get_month_statistic(user, dt_now.year, dt_now.month)
+    update.message.reply_text(statistic, reply_markup=inline_keyboard)
 
 def callback_query_handler(bot, update):
 
     data = json.loads(update.callback_query.data)
     user = User.query.filter_by(username=update.callback_query.from_user.username).first()
-    dt_now = datetime.datetime.utcnow()
+    dt_now = get_datetime()
 
     if data['msg_type'] == 'month':
 
         dt = datetime.datetime.strptime(data['month'], '%Y-%m')
-        dt += relativedelta(months= 1 if data['button'] == 'next' else -1)
+        if data['button'] in ('previous', 'next'):
+            dt += relativedelta(months= 1 if data['button'] == 'next' else -1)
+            statistic = get_month_statistic(user, dt.year, dt.month)
+            callback_data = {
+                'msg_type': 'month',
+                'month': dt.strftime('%Y-%m')
+            }
+            if dt.year == dt_now.year and dt.month == dt_now.month:
+                inline_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'}))],
+                    [InlineKeyboardButton('详情', callback_data=json.dumps({**callback_data, 'button': 'details'}))]
+                ])
+            else:
+                inline_keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'})),
+                    InlineKeyboardButton('>', callback_data=json.dumps({**callback_data, 'button': 'next'}))],
+                    [InlineKeyboardButton('详情', callback_data=json.dumps({**callback_data, 'button': 'details'}))]])
 
+            update.callback_query.edit_message_text(statistic, reply_markup=inline_keyboard)
+        
+        elif data['button'] == 'details':
+            callback_data = {
+                'msg_type': 'month_details',
+                'month': data['month']
+            }
+            inline_keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton('返回', callback_data=json.dumps(callback_data))
+            ]])
+            details = get_month_details(user, dt.year, dt.month)
+            update.callback_query.edit_message_text(details, reply_markup=inline_keyboard)
+
+    elif data['msg_type'] == 'month_details':
+
+        dt = datetime.datetime.strptime(data['month'], '%Y-%m')
         statistic = get_month_statistic(user, dt.year, dt.month)
         callback_data = {
             'msg_type': 'month',
             'month': dt.strftime('%Y-%m')
         }
         if dt.year == dt_now.year and dt.month == dt_now.month:
-            inline_keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'}))
-            ]])
+            inline_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'}))],
+                [InlineKeyboardButton('详情', callback_data=json.dumps({**callback_data, 'button': 'details'}))]
+            ])
         else:
             inline_keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'})),
-                InlineKeyboardButton('>', callback_data=json.dumps({**callback_data, 'button': 'next'}))
-            ]])
+                InlineKeyboardButton('>', callback_data=json.dumps({**callback_data, 'button': 'next'}))],
+                [InlineKeyboardButton('详情', callback_data=json.dumps({**callback_data, 'button': 'details'}))]
+            ])
 
         update.callback_query.edit_message_text(statistic, reply_markup=inline_keyboard)
 
     update.callback_query.answer()
+
 
 def get_month_statistic(user:User, year:int, month:int)->str:
 
@@ -169,10 +207,26 @@ def get_month_statistic(user:User, year:int, month:int)->str:
         out_part += '\n'
     return (begin_part + out_part + in_part).rstrip()
 
+def get_month_details(user:User, year:int, month:int)->str:
+    # 只展示支出的
+    bills = user.bills.filter(db.and_(
+        extract('year', Bill.create_time) == year,
+        extract('month', Bill.create_time) == month
+    ), Bill.type == 'out').order_by(text('-bill.amount')).all()
+
+    bills_part = ''
+    sum_out = Decimal('0')
+    title = f'{year}年{month}月支出详情\n\n'
+    for bill in bills:
+        sum_out += bill.amount
+        bills_part += f'{repr(bill)}\n'
+
+    sum_part = f'合计消费：{str(sum_out)}元\n\n'
+    return (title + sum_part + bills_part).rstrip()
+
 def error_handler(bot, update, error):
     current_app.logger.error(error)
     update.message.reply_text('Something wrong')
-
 
 dispatcher.add_handler(CallbackQueryHandler(callback_query_handler))
 dispatcher.add_handler(MessageHandler(Filters.text, reply_handler))
