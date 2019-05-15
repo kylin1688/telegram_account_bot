@@ -127,3 +127,4 @@ test.db
 migrations/
 .vscode/
 config.py
+celery_worker.py
