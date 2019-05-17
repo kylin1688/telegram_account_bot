@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, current_app
 import telegram
 from views import dispatcher, bot
 from models import db
@@ -13,7 +13,10 @@ db.init_app(app)
 @app.route('/hook', methods=['POST'])
 def webhook_handler():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
-    dispatcher.process_update(update)
+    try:
+        dispatcher.process_update(update)
+    except:
+        current_app.logger.exception('Something wrong.')
     return 'ok'
 
 manager = Manager(app)

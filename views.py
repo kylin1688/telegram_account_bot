@@ -22,8 +22,8 @@ keyboard = ReplyKeyboardMarkup(KEYBOARD)
 
 Redis = redis.StrictRedis(decode_responses=True)
 
+# TODO /day 重新添加遗漏账单
 # TODO /year 每月消费对比
-# TODO /day  日消费查询
 
 def reply_handler(bot, update):
 
@@ -70,6 +70,22 @@ def start_handler(bot, update):
         update.message.reply_text('welcome message', reply_markup=keyboard)
     else:
         update.message.reply_text('welcome back', reply_markup=keyboard)
+
+def day_command_handler(bot, update):
+
+    tg_user = update.message.from_user
+    user = User.query.filter_by(username=tg_user.username).first()
+    dt_now = get_datetime()
+    details = get_day_details(user, dt_now.year, dt_now.month, dt_now.day)    
+    callback_data = {
+        'msg_type': 'day',
+        'day': dt_now.strftime('%Y-%m-%d')
+    }
+    inline_keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'})),
+        InlineKeyboardButton('>', callback_data=json.dumps({**callback_data, 'button': 'next'}))
+    ]])
+    update.message.reply_text(details, reply_markup=inline_keyboard)
 
 def get_balance(bot, update):
     tg_user = update.message.from_user
@@ -139,7 +155,7 @@ def callback_query_handler(bot, update):
                     [InlineKeyboardButton('详情', callback_data=json.dumps({**callback_data, 'button': 'details'}))]])
 
             update.callback_query.edit_message_text(statistic, reply_markup=inline_keyboard)
-        
+
         elif data['button'] == 'details':
             callback_data = {
                 'msg_type': 'month_details',
@@ -172,6 +188,22 @@ def callback_query_handler(bot, update):
             ])
 
         update.callback_query.edit_message_text(statistic, reply_markup=inline_keyboard)
+
+    elif data['msg_type'] == 'day':
+
+        dt = datetime.datetime.strptime(data['day'], '%Y-%m-%d')
+        dt += relativedelta(days= 1 if data['button'] == 'next' else -1)
+        details = get_day_details(user, dt.year, dt.month, dt.day)
+
+        callback_data = {
+            'msg_type': 'day',
+            'day': dt.strftime('%Y-%m-%d')
+        }
+        inline_keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton('<', callback_data=json.dumps({**callback_data, 'button': 'previous'})),
+            InlineKeyboardButton('>', callback_data=json.dumps({**callback_data, 'button': 'next'}))
+        ]])
+        update.callback_query.edit_message_text(details, reply_markup=inline_keyboard)
 
     update.callback_query.answer()
 
@@ -224,9 +256,27 @@ def get_month_details(user:User, year:int, month:int)->str:
     sum_part = f'合计消费：{str(sum_out)}元\n\n'
     return (title + sum_part + bills_part).rstrip()
 
+def get_day_details(user:User, year:int, month:int, day:int)->str:
+
+    bills = user.bills.filter(db.and_(
+        extract('year', Bill.create_time) == year,
+        extract('month', Bill.create_time) == month,
+        extract('day', Bill.create_time) == day
+    ), Bill.type == 'out').order_by(text('bill.create_time')).all()
+
+    bills_part = ''
+    sum_out = Decimal('0')
+    title = f'{month}月{day}日支出详情\n\n'
+    for bill in bills:
+        sum_out += bill.amount
+        bills_part += f'{repr(bill)}\n'
+    sum_part = f'合计消费：{str(sum_out)}元\n\n'
+    return (title + sum_part + bills_part).rstrip()
+
 def error_handler(bot, update, error):
     current_app.logger.error(error)
     update.message.reply_text('Something wrong')
+
 
 dispatcher.add_handler(CallbackQueryHandler(callback_query_handler))
 dispatcher.add_handler(MessageHandler(Filters.text, reply_handler))
@@ -234,5 +284,6 @@ dispatcher.add_handler(CommandHandler('start', start_handler))
 dispatcher.add_handler(CommandHandler('set_balance', set_balance_handler))
 dispatcher.add_handler(CommandHandler('balance', get_balance))
 dispatcher.add_handler(CommandHandler('month', month_command_handler))
+dispatcher.add_handler(CommandHandler('day', day_command_handler))
 dispatcher.add_handler(CommandHandler('cancel', cancel_handler))
 dispatcher.add_error_handler(error_handler)
