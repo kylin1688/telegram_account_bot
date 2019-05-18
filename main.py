@@ -13,10 +13,7 @@ db.init_app(app)
 @app.route('/hook', methods=['POST'])
 def webhook_handler():
     update = telegram.Update.de_json(request.get_json(force=True), bot)
-    try:
-        dispatcher.process_update(update)
-    except:
-        current_app.logger.exception('Something wrong.')
+    dispatcher.process_update(update)
     return 'ok'
 
 manager = Manager(app)

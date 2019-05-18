@@ -36,10 +36,8 @@ def reply_handler(bot, update):
         update.message.reply_text(f'账单类别：{text}，请输入账单金额\n若想取消本次操作，请输入 /cancel')
 
     else:
-
         bill = json.loads(raw)
         user = User.query.filter_by(username=tg_user.username).first()
-
         splited_text = text.split(' ')
         if len(splited_text) == 2:
             amount, name = splited_text
@@ -47,7 +45,7 @@ def reply_handler(bot, update):
         else:
             amount = text
             bill.update({'amount': Decimal(amount), 'user_id': user.id})
-        
+
         if bill['type'] == 'out':
             reply = f'支出：{amount}元，类别：{bill["category"]}'
             user.balance -= Decimal(amount)
@@ -58,14 +56,14 @@ def reply_handler(bot, update):
         db.session.add(Bill(**bill))
         db.session.commit()
         Redis.delete(tg_user.username)
-
         update.message.reply_text(reply + f'\n当前余额：{str(user.balance)}元')
 
 def start_handler(bot, update):
     tg_user = update.message.from_user
     user = User.query.filter_by(username=tg_user.username).first()
     if user is None:
-        db.session.add(User(username=tg_user.username, first_name=tg_user.first_name))
+        db.session.add(User(username=tg_user.username, first_name=tg_user.first_name, 
+                        chat_id=update.message.chat.id))
         db.session.commit()
         update.message.reply_text('welcome message', reply_markup=keyboard)
     else:
@@ -204,6 +202,17 @@ def callback_query_handler(bot, update):
             InlineKeyboardButton('>', callback_data=json.dumps({**callback_data, 'button': 'next'}))
         ]])
         update.callback_query.edit_message_text(details, reply_markup=inline_keyboard)
+
+    elif data['msg_type'] == 'periodic':
+
+        bill = Bill.query.get(data['bill_id'])
+        db.session.delete(bill)
+        if bill.type == 'out':
+            user.balance += bill.amount
+        elif bill.type == 'in':
+            user.balance -= bill.amount
+        db.session.commit()
+        update.callback_query.edit_message_text(f'已撤销，当前余额：{str(user.balance)}元')
 
     update.callback_query.answer()
 
