@@ -17,6 +17,7 @@ class User(db.Model):
     first_name = db.Column(db.String(100))
     balance = db.Column(db.Numeric(10, 2), default=0)
     chat_id = db.Column(db.Integer)
+    planned_month_deposit = db.Column(db.Numeric(10, 2), default=None)
 
 class Bill(db.Model):
     __tablename__ = 'bill'
