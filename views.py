@@ -236,6 +236,7 @@ def get_month_statistic(user:User, year:int, month:int)->str:
             bills_out[bill.category] += bill.amount
     bills_out = sorted(bills_out.items(), key=lambda item:item[1], reverse=True)
 
+
     begin_part = f'{year}年{month}月收支统计\n\n'
     tabs = '\t\t\t\t\t\t\t'
     in_part = f'收入：{str(sum_in)}元\n'
@@ -246,7 +247,15 @@ def get_month_statistic(user:User, year:int, month:int)->str:
         for category, amount in bills_out:
             out_part += f'{tabs}-  {category}: {str(amount)}元\n'
         out_part += '\n'
-    return (begin_part + out_part + in_part).rstrip()
+
+    result = begin_part + out_part + in_part
+    if user.planned_month_deposit is not None:
+        delta = sum_in - sum_out
+        if delta > 0:
+            left_budget = delta - user.planned_month_deposit
+            result += f'\n净增：{str(delta)}元\n'
+            result += f'剩余额度：{str(left_budget)}元\n'
+    return result.rstrip()
 
 def get_month_details(user:User, year:int, month:int)->str:
     # 只展示支出的
