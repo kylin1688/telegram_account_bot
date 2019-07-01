@@ -104,7 +104,16 @@ def set_balance_handler(bot, update):
     if user is not None:
         user.balance = Decimal(balance)
         db.session.commit()
-    update.message.reply_text(f'余额设置成功，当前余额：{balance}元')
+        update.message.reply_text(f'余额设置成功，当前余额：{balance}元')
+
+def deposit_command_handler(bot, update):
+    tg_user = update.message.from_user
+    user = User.query.filter_by(username=tg_user.username).first()
+    deposit = update.message.text.replace('/deposit ', '')
+    if user is not None:
+        user.planned_month_deposit = Decimal(deposit)
+        db.session.commit()
+        update.message.reply_text(f'月计划存款已变更，当前数额：{deposit}元')
 
 def month_command_handler(bot, update):
 
@@ -304,4 +313,5 @@ dispatcher.add_handler(CommandHandler('balance', get_balance))
 dispatcher.add_handler(CommandHandler('month', month_command_handler))
 dispatcher.add_handler(CommandHandler('day', day_command_handler))
 dispatcher.add_handler(CommandHandler('cancel', cancel_handler))
+dispatcher.add_handler(CommandHandler('deposit', deposit_command_handler))
 dispatcher.add_error_handler(error_handler)
