@@ -30,7 +30,7 @@ urllib3==1.24.2
 uWSGI==2.0.18
 virtualenv==16.4.3
 wcwidth==0.1.7
-Werkzeug==0.15.3
+Werkzeug==0.16
 redis==3.3.11
 Flask-Migrate==2.5.2
 Flask-Script==2.0.6

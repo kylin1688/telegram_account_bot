@@ -4,7 +4,6 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 class Config:
-    DEBUG = True
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     BOT_TOKEN = os.environ.get('BOT_TOKEN')
     HOST = '0.0.0.0'
@@ -12,7 +11,7 @@ class Config:
 
 
 class ProductionConfig(Config):
-    SQLALCHEMY_DATABASE_URI = os.environ.get('PRO_DB_URL') or "sqlite:///" + os.path.join(basedir, "prod.sqlite")
+    SQLALCHEMY_DATABASE_URI = os.environ.get('PROD_DB_URL') or "sqlite:///" + os.path.join(basedir, "prod.sqlite")
 
 
 class DevelopmentConfig(Config):
