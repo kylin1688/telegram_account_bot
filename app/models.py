@@ -5,9 +5,11 @@ from config import TIMEZONE_HOURS
 
 db = SQLAlchemy()
 
+
 def get_datetime():
     utc_dt = datetime.datetime.utcnow()
     return utc_dt.astimezone(timezone(timedelta(hours=TIMEZONE_HOURS)))
+
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -18,6 +20,7 @@ class User(db.Model):
     balance = db.Column(db.Numeric(10, 2), default=0)
     chat_id = db.Column(db.Integer)
     planned_month_deposit = db.Column(db.Numeric(10, 2), default=None)
+
 
 class Bill(db.Model):
     __tablename__ = 'bill'
@@ -34,5 +37,5 @@ class Bill(db.Model):
 
     def __repr__(self):
         return '{:12} '.format(str(self.amount) + '元') \
-                + '{:4} '.format(self.category)        \
-                + ((" " + self.name) if self.name else "")
+               + '{:4} '.format(self.category) \
+               + ((" " + self.name) if self.name else "")

@@ -4,29 +4,57 @@ from collections import defaultdict
 from decimal import Decimal
 
 import redis
-import telegram
 from dateutil.relativedelta import relativedelta
 from flask import current_app
 from sqlalchemy import extract, text
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardMarkup)
-from telegram.ext import (CallbackQueryHandler, CommandHandler, Dispatcher,
-                          Filters, MessageHandler)
 
-from config import BOT_TOKEN, IN_KEYWORD, KEYBOARD
-from models import Bill, User, db, get_datetime
+from config import IN_KEYWORD, KEYBOARD
+from app.models import Bill, User, db, get_datetime
 
-bot = telegram.Bot(token=BOT_TOKEN)
-dispatcher = Dispatcher(bot, None)
 keyboard = ReplyKeyboardMarkup(KEYBOARD)
 
 Redis = redis.StrictRedis(decode_responses=True)
 
+
 # TODO /day 重新添加遗漏账单
 # TODO /year 每月消费对比
 
-def reply_handler(bot, update):
+def get_balance(bot, update):
+    tg_user = update.message.from_user
+    user = User.query.filter_by(username=tg_user.username).first()
+    if user is not None:
+        update.message.reply_text(f'当前余额：{user.balance}元')
 
+
+def cancel_handler(bot, update):
+    tg_user = update.message.from_user
+    Redis.delete(tg_user.username)
+    update.message.reply_text(f'OK')
+
+
+def set_balance_handler(bot, update):
+    tg_user = update.message.from_user
+    balance = update.message.text.replace('/set_balance ', '')
+    user = User.query.filter_by(username=tg_user.username).first()
+    if user is not None:
+        user.balance = Decimal(balance)
+        db.session.commit()
+        update.message.reply_text(f'余额设置成功，当前余额：{balance}元')
+
+
+def deposit_command_handler(bot, update):
+    tg_user = update.message.from_user
+    user = User.query.filter_by(username=tg_user.username).first()
+    deposit = update.message.text.replace('/deposit ', '')
+    if user is not None:
+        user.planned_month_deposit = Decimal(deposit)
+        db.session.commit()
+        update.message.reply_text(f'月计划存款已变更，当前数额：{deposit}元')
+
+
+def reply_handler(bot, update):
     tg_user = update.message.from_user
     text = update.message.text
     raw = Redis.get(tg_user.username)
@@ -58,23 +86,24 @@ def reply_handler(bot, update):
         Redis.delete(tg_user.username)
         update.message.reply_text(reply + f'\n当前余额：{str(user.balance)}元')
 
+
 def start_handler(bot, update):
     tg_user = update.message.from_user
     user = User.query.filter_by(username=tg_user.username).first()
     if user is None:
-        db.session.add(User(username=tg_user.username, first_name=tg_user.first_name, 
-                        chat_id=update.message.chat.id))
+        db.session.add(User(username=tg_user.username, first_name=tg_user.first_name,
+                            chat_id=update.message.chat.id))
         db.session.commit()
         update.message.reply_text('welcome message', reply_markup=keyboard)
     else:
         update.message.reply_text('welcome back', reply_markup=keyboard)
 
-def day_command_handler(bot, update):
 
+def day_command_handler(bot, update):
     tg_user = update.message.from_user
     user = User.query.filter_by(username=tg_user.username).first()
     dt_now = get_datetime()
-    details = get_day_details(user, dt_now.year, dt_now.month, dt_now.day)    
+    details = get_day_details(user, dt_now.year, dt_now.month, dt_now.day)
     callback_data = {
         'msg_type': 'day',
         'day': dt_now.strftime('%Y-%m-%d')
@@ -85,38 +114,8 @@ def day_command_handler(bot, update):
     ]])
     update.message.reply_text(details, reply_markup=inline_keyboard)
 
-def get_balance(bot, update):
-    tg_user = update.message.from_user
-    user = User.query.filter_by(username=tg_user.username).first()
-    if user is not None:
-        update.message.reply_text(f'当前余额：{user.balance}元')
-
-def cancel_handler(bot, update):
-    tg_user = update.message.from_user
-    Redis.delete(tg_user.username)
-    update.message.reply_text(f'OK')
-
-def set_balance_handler(bot, update):
-
-    tg_user = update.message.from_user
-    balance = update.message.text.replace('/set_balance ', '')
-    user = User.query.filter_by(username=tg_user.username).first()
-    if user is not None:
-        user.balance = Decimal(balance)
-        db.session.commit()
-        update.message.reply_text(f'余额设置成功，当前余额：{balance}元')
-
-def deposit_command_handler(bot, update):
-    tg_user = update.message.from_user
-    user = User.query.filter_by(username=tg_user.username).first()
-    deposit = update.message.text.replace('/deposit ', '')
-    if user is not None:
-        user.planned_month_deposit = Decimal(deposit)
-        db.session.commit()
-        update.message.reply_text(f'月计划存款已变更，当前数额：{deposit}元')
 
 def month_command_handler(bot, update):
-
     # TODO 指定月份查询
 
     tg_user = update.message.from_user
@@ -134,8 +133,8 @@ def month_command_handler(bot, update):
     statistic = get_month_statistic(user, dt_now.year, dt_now.month)
     update.message.reply_text(statistic, reply_markup=inline_keyboard)
 
-def callback_query_handler(bot, update):
 
+def callback_query_handler(bot, update):
     data = json.loads(update.callback_query.data)
     user = User.query.filter_by(username=update.callback_query.from_user.username).first()
     dt_now = get_datetime()
@@ -144,7 +143,7 @@ def callback_query_handler(bot, update):
 
         dt = datetime.datetime.strptime(data['month'], '%Y-%m')
         if data['button'] in ('previous', 'next'):
-            dt += relativedelta(months= 1 if data['button'] == 'next' else -1)
+            dt += relativedelta(months=1 if data['button'] == 'next' else -1)
             statistic = get_month_statistic(user, dt.year, dt.month)
             callback_data = {
                 'msg_type': 'month',
@@ -199,7 +198,7 @@ def callback_query_handler(bot, update):
     elif data['msg_type'] == 'day':
 
         dt = datetime.datetime.strptime(data['day'], '%Y-%m-%d')
-        dt += relativedelta(days= 1 if data['button'] == 'next' else -1)
+        dt += relativedelta(days=1 if data['button'] == 'next' else -1)
         details = get_day_details(user, dt.year, dt.month, dt.day)
 
         callback_data = {
@@ -226,15 +225,14 @@ def callback_query_handler(bot, update):
     update.callback_query.answer()
 
 
-def get_month_statistic(user:User, year:int, month:int)->str:
-
+def get_month_statistic(user: User, year: int, month: int) -> str:
     bills = user.bills.filter(db.and_(
         extract('year', Bill.create_time) == year,
         extract('month', Bill.create_time) == month
     )).all()
 
-    bills_in = defaultdict(lambda :Decimal('0'))
-    bills_out = defaultdict(lambda :Decimal('0'))
+    bills_in = defaultdict(lambda: Decimal('0'))
+    bills_out = defaultdict(lambda: Decimal('0'))
     sum_out = sum_in = Decimal('0')
     for bill in bills:
         if bill.type == 'in':
@@ -243,8 +241,7 @@ def get_month_statistic(user:User, year:int, month:int)->str:
         elif bill.type == 'out':
             sum_out += bill.amount
             bills_out[bill.category] += bill.amount
-    bills_out = sorted(bills_out.items(), key=lambda item:item[1], reverse=True)
-
+    bills_out = sorted(bills_out.items(), key=lambda item: item[1], reverse=True)
 
     begin_part = f'{year}年{month}月收支统计\n\n'
     tabs = '\t\t\t\t\t\t\t'
@@ -266,7 +263,8 @@ def get_month_statistic(user:User, year:int, month:int)->str:
             result += f'剩余额度：{str(left_budget)}元\n'
     return result.rstrip()
 
-def get_month_details(user:User, year:int, month:int)->str:
+
+def get_month_details(user: User, year: int, month: int) -> str:
     # 只展示支出的
     bills = user.bills.filter(db.and_(
         extract('year', Bill.create_time) == year,
@@ -283,8 +281,8 @@ def get_month_details(user:User, year:int, month:int)->str:
     sum_part = f'合计消费：{str(sum_out)}元\n\n'
     return (title + sum_part + bills_part).rstrip()
 
-def get_day_details(user:User, year:int, month:int, day:int)->str:
 
+def get_day_details(user: User, year: int, month: int, day: int) -> str:
     bills = user.bills.filter(db.and_(
         extract('year', Bill.create_time) == year,
         extract('month', Bill.create_time) == month,
@@ -300,18 +298,7 @@ def get_day_details(user:User, year:int, month:int, day:int)->str:
     sum_part = f'合计消费：{str(sum_out)}元\n\n'
     return (title + sum_part + bills_part).rstrip()
 
+
 def error_handler(bot, update, error):
     current_app.logger.error(error)
     update.message.reply_text('Something wrong')
-
-
-dispatcher.add_handler(CallbackQueryHandler(callback_query_handler))
-dispatcher.add_handler(MessageHandler(Filters.text, reply_handler))
-dispatcher.add_handler(CommandHandler('start', start_handler))
-dispatcher.add_handler(CommandHandler('set_balance', set_balance_handler))
-dispatcher.add_handler(CommandHandler('balance', get_balance))
-dispatcher.add_handler(CommandHandler('month', month_command_handler))
-dispatcher.add_handler(CommandHandler('day', day_command_handler))
-dispatcher.add_handler(CommandHandler('cancel', cancel_handler))
-dispatcher.add_handler(CommandHandler('deposit', deposit_command_handler))
-dispatcher.add_error_handler(error_handler)

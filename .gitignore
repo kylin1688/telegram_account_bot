@@ -122,9 +122,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# my
+# db
 test.db
-migrations/
+
+# ide
 .vscode/
-config.py
-celery_worker.py
+.idea/
