@@ -20,7 +20,7 @@ def webhook_handler():
 @telegram_bp.before_app_first_request
 def bot_initialization():
     global bot, dispatcher
-    bot: Bot = Bot(current_app.config['TG_BOT_TOKEN'])
+    bot: Bot = Bot(current_app.config['BOT_TOKEN'])
     dispatcher: Dispatcher = Dispatcher(bot, None)
 
     dispatcher.add_handler(CallbackQueryHandler(callback_query_handler))
