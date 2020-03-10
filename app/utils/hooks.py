@@ -10,3 +10,4 @@ def log_request_params():
 
 def log_response(response: Response):
     current_app.logger.debug(f'response: {response.data}')
+    return response

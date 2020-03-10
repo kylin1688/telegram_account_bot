@@ -50,10 +50,10 @@ def register_logger(app: Flask):
         '%(asctime)s - %(levelname)s - %(filename)s - %(lineno)s - %(message)s'
     )
     handler.setFormatter(logging_format)
-    handler.setLevel(logging.INFO)
+    handler.setLevel(logging.DEBUG)
     app.logger.addHandler(handler)
     # 写入控制台
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
+    ch.setLevel(logging.DEBUG)
     app.logger.addHandler(ch)
-    app.logger.setLevel(logging.INFO)
+    app.logger.setLevel(logging.DEBUG)
