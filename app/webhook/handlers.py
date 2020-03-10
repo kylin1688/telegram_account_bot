@@ -11,7 +11,7 @@ from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardMarkup)
 
 from config import IN_KEYWORD, KEYBOARD
-from app.models import Bill, User, db, get_datetime
+from app.models import Bill, User, db
 
 keyboard = ReplyKeyboardMarkup(KEYBOARD)
 
@@ -102,7 +102,7 @@ def start_handler(bot, update):
 def day_command_handler(bot, update):
     tg_user = update.message.from_user
     user = User.query.filter_by(username=tg_user.username).first()
-    dt_now = get_datetime()
+    dt_now = datetime.datetime.now()
     details = get_day_details(user, dt_now.year, dt_now.month, dt_now.day)
     callback_data = {
         'msg_type': 'day',
@@ -120,7 +120,7 @@ def month_command_handler(bot, update):
 
     tg_user = update.message.from_user
     user = User.query.filter_by(username=tg_user.username).first()
-    dt_now = get_datetime()
+    dt_now = datetime.datetime.now()
     callback_data = {
         'msg_type': 'month',
         'month': dt_now.strftime('%Y-%m')
@@ -137,7 +137,7 @@ def month_command_handler(bot, update):
 def callback_query_handler(bot, update):
     data = json.loads(update.callback_query.data)
     user = User.query.filter_by(username=update.callback_query.from_user.username).first()
-    dt_now = get_datetime()
+    dt_now = datetime.datetime.now()
 
     if data['msg_type'] == 'month':
 
