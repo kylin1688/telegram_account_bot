@@ -10,7 +10,7 @@ load_dotenv(os.path.join(basedir, ".env"))
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from rpyc.utils.server import ThreadedServer
-from jobs import *
+from .jobs import *
 
 
 class SchedulerService(rpyc.Service):
