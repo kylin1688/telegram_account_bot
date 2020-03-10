@@ -4,6 +4,7 @@ from flask import Flask
 from flask.logging import default_handler
 
 from app.models import db
+from app.utils.hooks import log_request_params, log_response
 from app.webhook import telegram_bp
 from app.utils import multilog
 from app.utils.error import handle_exception
@@ -16,16 +17,29 @@ def create_app(config_name: str):
 
     @app.route('/', endpoint='ping_pong')
     def ping_pong():
-        return "I'm still alive."
+        return "I'm still alive.\n", 200
 
     db.init_app(app)
+
     register_logger(app)
-
-    app.register_blueprint(telegram_bp, url_prefix='/telegram')
-
-    app.register_error_handler(Exception, handle_exception)
+    register_hooks(app)
+    register_blueprints(app)
+    register_error_handlers(app)
 
     return app
+
+
+def register_blueprints(app: Flask):
+    app.register_blueprint(telegram_bp, url_prefix='/telegram')
+
+
+def register_error_handlers(app: Flask):
+    app.register_error_handler(Exception, handle_exception)
+
+
+def register_hooks(app: Flask):
+    app.before_request(log_request_params)
+    app.after_request(log_response)
 
 
 def register_logger(app: Flask):
