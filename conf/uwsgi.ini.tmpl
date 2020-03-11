@@ -1,0 +1,8 @@
+[uwsgi]
+http=0.0.0.0:6000
+wsgi-file=./manage.py
+#daemonize=./server.log
+logto=./server.log
+pidfile=./pid.pid
+callable=app
+#python-autoreload=2
