@@ -1,17 +1,34 @@
-from flask_sqlalchemy import SQLAlchemy
 import datetime
-from datetime import timezone, timedelta
-from config import TIMEZONE_HOURS
+import json
+
+from flask_restplus import fields
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.sql import sqltypes
 
 db = SQLAlchemy()
 
 
-def get_datetime():
-    utc_dt = datetime.datetime.utcnow()
-    return utc_dt.astimezone(timezone(timedelta(hours=TIMEZONE_HOURS)))
+class Marshaling:
+    # 用来给sqlalchemy模型自动生成序列化规则，供flask-restplus使用
+    # 偷懒用的，不放心还是可以直接手写模型，没有影响
+
+    type_mapper = {
+        sqltypes.String: fields.String,
+        sqltypes.Integer: fields.Integer,
+        sqltypes.Numeric: fields.Float,
+    }
+
+    @classmethod
+    def auto_marshaling_model(cls):
+        model: dict = {}
+        for column in cls.__table__.c:
+            pass
+        return {
+            column.name: cls.type_mapper[type(column.type)] for column in cls.__table__.c
+        }
 
 
-class User(db.Model):
+class User(db.Model, Marshaling):
     __tablename__ = 'user'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -21,8 +38,14 @@ class User(db.Model):
     chat_id = db.Column(db.Integer)
     planned_month_deposit = db.Column(db.Numeric(10, 2), default=None)
 
+    @classmethod
+    def auto_marshaling_model(cls):
+        model: dict = super().auto_marshaling_model()
+        model['id'] = fields.Integer(readonly=True)
+        return model
 
-class Bill(db.Model):
+
+class Bill(db.Model, Marshaling):
     __tablename__ = 'bill'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -39,3 +62,30 @@ class Bill(db.Model):
         return '{:12} '.format(str(self.amount) + '元') \
                + '{:4} '.format(self.category) \
                + ((" " + self.name) if self.name else "")
+
+
+class ScheduledBillTask(db.Model, Marshaling):
+    __tablename__ = 'task'
+
+    id = db.Column(db.String(50), primary_key=True)
+    amount = db.Column(db.Numeric(10, 2))
+    trigger = db.Column(db.String(10))
+    category = db.Column(db.String(100))
+    type = db.Column(db.String(20))
+    name = db.Column(db.String(100), nullable=True)
+    trigger_kwargs = db.Column(db.String(200))
+
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    user = db.relationship('User', backref=db.backref('tasks', lazy='dynamic'))
+
+    @classmethod
+    def auto_marshaling_model(cls):
+        model: dict = super().auto_marshaling_model()
+
+        class TriggerKwargs(fields.Raw):
+            def format(self, value):
+                return json.loads(value)
+
+        model['trigger_kwargs'] = TriggerKwargs(required=True)
+        model['id'] = fields.String(readonly=True)
+        return model

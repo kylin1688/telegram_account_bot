@@ -3,6 +3,7 @@ import logging
 from flask import Flask
 from flask.logging import default_handler
 
+from app.api import api_bp
 from app.models import db
 from app.utils.hooks import log_request_params, log_response
 from app.webhook import telegram_bp
@@ -30,6 +31,7 @@ def create_app(config_name: str):
 
 
 def register_blueprints(app: Flask):
+    app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(telegram_bp, url_prefix='/telegram')
 
 

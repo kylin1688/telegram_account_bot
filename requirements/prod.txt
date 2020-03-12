@@ -38,3 +38,5 @@ Flask-SQLAlchemy==2.4.1
 python-dotenv==0.10.3
 rpyc==4.1.4
 apscheduler==3.6.3
+flask-restplus==0.13.0
+flask-cors==3.0.8
