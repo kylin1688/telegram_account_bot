@@ -2,6 +2,7 @@ import os
 
 import rpyc
 from apscheduler.executors.pool import ThreadPoolExecutor
+from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from dotenv import load_dotenv
 
@@ -43,19 +44,22 @@ if __name__ == '__main__':
     jobstores = {
         'default': SQLAlchemyJobStore(
             url=os.environ.get('APSCHEDULER_SQLALCHEMY_URL')
-                or 'sqlite:///' + os.path.join(basedir, 'apscheduler.sqlite3'))}
-    executors = {
-        'default': ThreadPoolExecutor(20)
+                or 'sqlite:///' + os.path.join(basedir, 'apscheduler.sqlite3')),
+        'memory': MemoryJobStore()
     }
-    scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors)
-    scheduler.start()
+executors = {
+    'default': ThreadPoolExecutor(20)
+}
+scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors)
+scheduler.add_job(send_daily_bills, 'cron', jobstore='memory', hour=22)
+scheduler.start()
 
-    protocol_config = {'allow_public_attrs': True}
-    server = ThreadedServer(SchedulerService, port=int(os.environ.get('APS_SERVER_PORT')),
-                            protocol_config=protocol_config)
-    try:
-        server.start()
-    except (KeyboardInterrupt, SystemExit):
-        pass
-    finally:
-        scheduler.shutdown()
+protocol_config = {'allow_public_attrs': True}
+server = ThreadedServer(SchedulerService, port=int(os.environ.get('APS_SERVER_PORT')),
+                        protocol_config=protocol_config)
+try:
+    server.start()
+except (KeyboardInterrupt, SystemExit):
+    pass
+finally:
+    scheduler.shutdown()
