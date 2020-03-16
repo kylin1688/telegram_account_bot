@@ -1,10 +1,11 @@
 import telegram
 from flask import Blueprint, request, current_app
-from telegram import Update, Bot
-from telegram.ext import Dispatcher, CallbackQueryHandler, MessageHandler, CommandHandler, Filters
 
-from app.webhook.handlers import reply_handler, start_handler, day_command_handler, get_balance, cancel_handler, set_balance_handler, \
+from app.webhook.handlers import reply_handler, start_handler, day_command_handler, get_balance, cancel_handler, \
+    set_balance_handler, \
     deposit_command_handler, month_command_handler, callback_query_handler, error_handler
+from dependencies.telegram import Update, Bot
+from dependencies.telegram.ext import Dispatcher, CallbackQueryHandler, MessageHandler, CommandHandler, Filters
 
 telegram_bp = Blueprint('telegram', __name__)
 bot, dispatcher = None, None  # initialized when first request coming
@@ -32,7 +33,6 @@ def bot_initialization():
     dispatcher.add_handler(CommandHandler('day', day_command_handler))
     dispatcher.add_handler(CommandHandler('cancel', cancel_handler))
     dispatcher.add_handler(CommandHandler('deposit', deposit_command_handler))
-    dispatcher.add_error_handler(error_handler)
 
 
 @telegram_bp.errorhandler(Exception)
