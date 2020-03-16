@@ -4,8 +4,9 @@ from flask import Blueprint, request, current_app
 from app.webhook.handlers import reply_handler, start_handler, day_command_handler, get_balance, cancel_handler, \
     set_balance_handler, \
     deposit_command_handler, month_command_handler, callback_query_handler, error_handler
-from dependencies.telegram import Update, Bot
-from dependencies.telegram.ext import Dispatcher, CallbackQueryHandler, MessageHandler, CommandHandler, Filters
+from telegram import Update, Bot
+from telegram.ext import CallbackQueryHandler, MessageHandler, CommandHandler, Filters
+from dependencies.telegram.ext.dispatcher import Dispatcher
 
 telegram_bp = Blueprint('telegram', __name__)
 bot, dispatcher = None, None  # initialized when first request coming

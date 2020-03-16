@@ -7,11 +7,10 @@ import redis
 from dateutil.relativedelta import relativedelta
 from flask import current_app
 from sqlalchemy import extract, text
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 from app.models import Bill, User, db
 from config import IN_KEYWORD, KEYBOARD
-from dependencies.telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
-                                   ReplyKeyboardMarkup)
 
 keyboard = ReplyKeyboardMarkup(KEYBOARD)
 
