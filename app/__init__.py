@@ -5,7 +5,7 @@ from flask.logging import default_handler
 
 from app.api import api_bp
 from app.models import db
-from app.utils.hooks import log_request_params, log_response
+from app.utils.middleware import log_request_params, log_response
 from app.webhook import telegram_bp
 from app.utils import multilog
 from app.utils.error import handle_exception
