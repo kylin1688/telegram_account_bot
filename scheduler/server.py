@@ -47,19 +47,19 @@ if __name__ == '__main__':
                 or 'sqlite:///' + os.path.join(basedir, 'apscheduler.sqlite3')),
         'memory': MemoryJobStore()
     }
-executors = {
-    'default': ThreadPoolExecutor(20)
-}
-scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors)
-scheduler.add_job(send_daily_bills, 'cron', jobstore='memory', hour=22)
-scheduler.start()
+    executors = {
+        'default': ThreadPoolExecutor(20)
+    }
+    scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors)
+    scheduler.add_job(send_daily_bills, 'cron', jobstore='memory', hour=22)
+    scheduler.start()
 
-protocol_config = {'allow_public_attrs': True}
-server = ThreadedServer(SchedulerService, port=int(os.environ.get('APS_SERVER_PORT')),
-                        protocol_config=protocol_config)
-try:
-    server.start()
-except (KeyboardInterrupt, SystemExit):
-    pass
-finally:
-    scheduler.shutdown()
+    protocol_config = {'allow_public_attrs': True}
+    server = ThreadedServer(SchedulerService, port=int(os.environ.get('APS_SERVER_PORT')),
+                            protocol_config=protocol_config)
+    try:
+        server.start()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
+        scheduler.shutdown()
